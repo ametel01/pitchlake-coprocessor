@@ -2,7 +2,6 @@ use eth_rlp_types::BlockHeader as EthBlockHeader;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-
 // #[derive(Debug, Serialize, Deserialize, Clone)]
 // pub struct BlockHeader {
 //     pub a: i64,

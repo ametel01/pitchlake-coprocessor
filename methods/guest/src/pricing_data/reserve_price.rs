@@ -1,6 +1,6 @@
 use eth_rlp_types::BlockHeader;
 use eyre::{anyhow as err, Result};
-use nalgebra::{DMatrix, DVector, Matrix, MatrixView};
+use nalgebra::{DMatrix, DVector};
 use rand::prelude::*;
 use rand_distr::{Distribution, Normal};
 use statrs::distribution::Binomial;
@@ -12,10 +12,11 @@ use optimization::{NumericalDifferentiation, Func, GradientDescent, Minimizer};
 use super::utils::hex_string_to_f64;
 
 pub fn calculate_reserve_price(block_headers: Vec<BlockHeader>) -> Result<f64> {
+    eprintln!("Starting calculate_reserve_price with {} block headers", block_headers.len());
     if block_headers.is_empty() {
         return Err(eyre::eyre!("No block headers provided."));
     }
-
+    eprintln!("Calculating reserve price...");
     let mut data = Vec::new();
     for header in block_headers {
         let timestamp = i64::from_str_radix(
@@ -25,19 +26,27 @@ pub fn calculate_reserve_price(block_headers: Vec<BlockHeader>) -> Result<f64> {
         let base_fee = hex_string_to_f64(
             &header.base_fee_per_gas.ok_or_else(|| err!("No base fee in header"))?,
         )?;
+        eprintln!("Processed block - timestamp: {}, base_fee: {}", timestamp, base_fee);
         data.push((timestamp * 1000, base_fee));
     }
 
-        data.sort_by(|a, b| a.0.cmp(&b.0));
-    let twap_7d = add_twap_7d(&data)?;
-    let strike = twap_7d.last().ok_or_else(|| err!("The series is empty"))?;
+    data.sort_by(|a, b| a.0.cmp(&b.0));
+    eprintln!("Sorted data range: {} to {}", data[0].0, data.last().unwrap().0);
     
-    let num_paths = 4000;
-    let n_periods = 720;
+    let twap_7d = add_twap_7d(&data)?;
+    eprintln!("Calculated TWAP 7d, last value: {}", twap_7d.last().unwrap());
+    let strike = twap_7d.last().ok_or_else(|| err!("The series is empty"))?;
+    eprintln!("Strike price: {}", strike);
+    
+    let num_paths = 4;
+    let n_periods = 7;
     
     let fees: Vec<&f64> = data.iter().map(|x| &x.1).collect();
     let log_base_fee = compute_log_of_base_fees(&fees)?;
+    eprintln!("Computed log base fees, length: {}", log_base_fee.len());
+    
     let (slope, intercept, trend_values) = discover_trend(&log_base_fee)?;
+    eprintln!("Discovered trend - slope: {}, intercept: {}", slope, intercept);
     
     let detrended_log_base_fee: DVector<f64> = DVector::from_iterator(
         log_base_fee.len(),
@@ -48,12 +57,14 @@ pub fn calculate_reserve_price(block_headers: Vec<BlockHeader>) -> Result<f64> {
         &detrended_log_base_fee,
         &data,
     )?;
+    eprintln!("Seasonality parameters: {:?}", season_param);
     
-    let (de_seasonalized_detrended_simulated_prices, _params) = simulate_prices(
+    let (de_seasonalized_detrended_simulated_prices, params) = simulate_prices(
         &de_seasonalised_detrended_log_base_fee,
         n_periods,
         num_paths,
     )?;
+    eprintln!("Simulated prices with parameters: {:?}", params);
     
     let period_start_timestamp = data[0].0;
     let period_end_timestamp = data.last().ok_or_else(|| err!("Missing end timestamp"))?.0;
@@ -113,6 +124,7 @@ pub fn calculate_reserve_price(block_headers: Vec<BlockHeader>) -> Result<f64> {
     let average_payoff = payoffs.mean();
     
     let reserve_price = f64::exp(-0.05) * average_payoff;
+    eprintln!("Final reserve price calculated: {}", reserve_price);
     
     Ok(reserve_price)
 }
@@ -122,6 +134,8 @@ fn simulate_prices(
     n_periods: usize,
     num_paths: usize,
 ) -> Result<(DMatrix<f64>, Vec<f64>)> {
+    eprintln!("Starting price simulation with {} periods and {} paths", n_periods, num_paths);
+    
     let dt = 1.0 / (365.0 * 24.0);
 
     // Prepare time series data
@@ -141,6 +155,7 @@ fn simulate_prices(
         &function,
         vec![-3.928e-02, 2.873e-04, 4.617e-02, var_pt, var_pt, 0.2],
     );
+    eprintln!("Optimization completed - solution: {:?}", solution.position);
 
     // Extract the optimized parameters
     let params = &solution.position;
@@ -151,6 +166,8 @@ fn simulate_prices(
     let sigma = (params[3] / dt).sqrt();
     let sigma_j = params[4].sqrt();
     let lambda_ = params[5] / dt;
+    eprintln!("Model parameters - alpha: {}, kappa: {}, mu_j: {}, sigma: {}, sigma_j: {}, lambda: {}", 
+              alpha, kappa, mu_j, sigma, sigma_j, lambda_);
 
             
     // RNG for stochastic processes
@@ -230,8 +247,10 @@ fn predict(x: &[f64], slope: f64, intercept: f64) -> DVector<f64> {
 }
 
 fn discover_trend(log_base_fee: &[f64]) -> Result<(f64, f64, Vec<f64>)> {
+    eprintln!("Discovering trend from {} log base fee values", log_base_fee.len());
     let time_index: Vec<f64> = (0..log_base_fee.len()).map(|i| i as f64).collect();
     let (slope, intercept) = fit_linear_regression(&time_index, log_base_fee)?;
+    eprintln!("Linear regression results - slope: {}, intercept: {}", slope, intercept);
     let trend_values = predict(&time_index, slope, intercept);
     
     Ok((slope, intercept, trend_values.as_slice().to_vec()))
@@ -245,6 +264,7 @@ fn remove_seasonality(
     detrended_log_base_fee: &DVector<f64>,
     data: &Vec<(i64, f64)>,
 ) -> Result<(DVector<f64>, DVector<f64>)> {
+    eprintln!("Removing seasonality from {} data points", data.len());
     let start_timestamp = data.first().ok_or_else(|| err!("Missing start timestamp"))?.0;
     
     let t_series = DVector::from_iterator(
@@ -263,6 +283,7 @@ fn remove_seasonality(
     
     let de_seasonalised_detrended_log_base_fee = detrended_log_base_fee - season;
     
+    eprintln!("Seasonality parameters: {:?}", season_param);
     Ok((de_seasonalised_detrended_log_base_fee, season_param))
 }
 
@@ -321,6 +342,7 @@ fn neg_log_likelihood(params: &[f64], pt: &DVector<f64>, pt_1: &DVector<f64>) ->
 }
 
 fn add_twap_7d(data: &Vec<(i64, f64)>) -> Result<Vec<f64>> {
+    eprintln!("Calculating TWAP 7d for {} data points", data.len());
     let required_window_size = 24 * 7;
     let n = data.len();
     
@@ -341,6 +363,7 @@ fn add_twap_7d(data: &Vec<(i64, f64)>) -> Result<Vec<f64>> {
         twap_values.push(window_mean);
     }
 
+    eprintln!("TWAP 7d calculation completed with {} values", twap_values.len());
     Ok(twap_values)
 }
 

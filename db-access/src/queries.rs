@@ -1,7 +1,5 @@
 use db_models::{temp_to_block_header, JobRequest, JobStatus};
-use db_models::{
-    BlockHeader as DbBlockHeader, BlockHeaderSubset, TempBlockHeader, Transaction,
-};
+use db_models::{BlockHeader as DbBlockHeader, BlockHeaderSubset, TempBlockHeader, Transaction};
 use eth_rlp_types::BlockHeader;
 use eyre::Result;
 use sqlx::{types::BigDecimal, Error, PgPool};

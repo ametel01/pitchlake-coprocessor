@@ -4,6 +4,9 @@ This document outlines the libraries and functions that need to be refactored to
 
 ## Libraries Requiring Refactoring
 
+## Original Python Repository
+https://github.com/NethermindEth/pitchlake-pricing
+
 ### nalgebra
 Core matrix operations that need fixed-point implementations:
 - [ ] DMatrix/DVector basic operations

@@ -1,14 +1,12 @@
 [workspace]
 resolver = "2"
-members = [
-    "host", 
-    "methods", 
-    "db-access", 
-    "db-models"
-]
+members = ["host", "db-access", "db-models", "guest-pricing"]
 
 [workspace.package]
+name = "pitchlake-coprocessor"
+version = "0.1.0"
 edition = "2021"
+default-run = "host"
 
 # Always optimize; building and running the guest takes much longer without optimization.
 [profile.dev]

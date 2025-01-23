@@ -1,0 +1,13 @@
+[package]
+name = "guest-pricing"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+eyre = "0.6"
+eth-rlp-types = { git = "https://github.com/NethermindEth/eth-rlp-verify.git", package = "eth-rlp-types", branch = "tiny-keccak" }
+fixed = { version = "1.28.0", features = ["serde"] }
+# serde = { version = "1.0", features = ["derive"] }

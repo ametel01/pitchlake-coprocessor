@@ -1,0 +1,11 @@
+[package]
+name = "pricing-fixed"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+guest-pricing = { path = "../../guest-pricing" }
+risc0-zkvm = { version = "1.2.1", default-features = false, features = ['std', 'getrandom', ] }
+eth-rlp-types = { git = "https://github.com/NethermindEth/eth-rlp-verify.git", package = "eth-rlp-types", branch = "tiny-keccak" }

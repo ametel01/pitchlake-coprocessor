@@ -1,5 +1,5 @@
 [package]
-name = "pricing_calculator"
+name = "pricing-float"
 version = "0.1.0"
 edition = "2021"
 

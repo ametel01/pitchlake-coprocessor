@@ -10,4 +10,4 @@ path = "src/lib.rs"
 eyre = "0.6"
 eth-rlp-types = { git = "https://github.com/NethermindEth/eth-rlp-verify.git", package = "eth-rlp-types", branch = "tiny-keccak" }
 fixed = { version = "1.28.0", features = ["serde"] }
-# serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }

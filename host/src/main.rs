@@ -3,10 +3,51 @@
 use clap::{Parser, ValueEnum};
 use db_access::queries::get_block_headers_by_block_range;
 use db_access::DbConnection;
+use eth_rlp_types::BlockHeader;
+use eyre::Result;
 use fixed::{types::extra::U64, FixedI128};
 use methods::{PRICING_FIXED_ELF, PRICING_FLOAT_ELF};
 use risc0_zkvm::{default_prover, ExecutorEnv};
 use tokio::task;
+
+pub fn hex_string_to_f64(hex_str: &String) -> Result<f64> {
+    let stripped = hex_str.trim_start_matches("0x");
+    u128::from_str_radix(stripped, 16)
+        .map(|value| value as f64)
+        .map_err(|e| eyre::eyre!("Error converting hex string '{}' to f64: {}", hex_str, e))
+}
+
+// Define a type alias for our fixed-point number with 64 fractional bits
+type Fixed = FixedI128<U64>;
+
+fn parse_hex(hex_str: &str) -> Option<u128> {
+    let stripped = hex_str.trim_start_matches("0x");
+    u128::from_str_radix(stripped, 16).ok()
+}
+
+fn process_headers_fixed(headers: &[BlockHeader]) -> Vec<Option<Fixed>> {
+    headers
+        .iter()
+        .map(|header| {
+            header
+                .base_fee_per_gas
+                .as_ref()
+                .and_then(|fee| parse_hex(fee).map(Fixed::from_num))
+        })
+        .collect()
+}
+
+fn process_headers_float(headers: &[BlockHeader]) -> Vec<Option<f64>> {
+    headers
+        .iter()
+        .map(|header| {
+            header
+                .base_fee_per_gas
+                .as_ref()
+                .and_then(|fee| parse_hex(fee).map(|x| x as f64))
+        })
+        .collect()
+}
 
 #[derive(Copy, Clone, PartialEq, Eq, ValueEnum, Debug)]
 enum PricingMethod {
@@ -58,13 +99,26 @@ async fn run_host(
     let block_headers = get_block_headers_by_block_range(&db.pool, start_block, end_block).await?;
 
     let prove_info = task::spawn_blocking(move || {
-        let env = ExecutorEnv::builder()
-            .write(&block_headers)
-            .unwrap()
-            .build()
-            .unwrap();
-        let prover = default_prover();
+        let env = match method {
+            PricingMethod::Float => {
+                let base_fees = process_headers_float(&block_headers);
+                ExecutorEnv::builder()
+                    .write(&base_fees)
+                    .unwrap()
+                    .build()
+                    .unwrap()
+            }
+            PricingMethod::Fixed => {
+                let base_fees = process_headers_fixed(&block_headers);
+                ExecutorEnv::builder()
+                    .write(&base_fees)
+                    .unwrap()
+                    .build()
+                    .unwrap()
+            }
+        };
 
+        let prover = default_prover();
         match method {
             PricingMethod::Float => prover.prove(env, PRICING_FLOAT_ELF).unwrap(),
             PricingMethod::Fixed => prover.prove(env, PRICING_FIXED_ELF).unwrap(),
@@ -81,8 +135,7 @@ async fn run_host(
             (v, t)
         }
         PricingMethod::Fixed => {
-            let (v, t): (Option<FixedI128<U64>>, Option<FixedI128<U64>>) =
-                receipt.journal.decode().unwrap();
+            let (v, t): (Option<Fixed>, Option<Fixed>) = receipt.journal.decode().unwrap();
             (v.map(|x| x.to_num::<f64>()), t.map(|x| x.to_num::<f64>()))
         }
     };

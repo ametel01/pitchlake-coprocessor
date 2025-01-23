@@ -1,19 +1,15 @@
-use super::utils::{extract_base_fees, hex_string_to_fixed, Fixed};
-use eth_rlp_types::BlockHeader;
+use super::utils::Fixed;
 use eyre::{anyhow, Result};
 
-/// Calculates TWAP from a vector of hex strings representing base fees
-pub fn calculate_twap(base_fees: Vec<String>) -> Result<Fixed> {
+/// Calculates TWAP from a vector of fixed-point base fees
+pub fn calculate_twap_fixed(base_fees: &[Option<Fixed>]) -> Result<Fixed> {
     if base_fees.is_empty() {
         return Err(anyhow!("The provided base fees are empty."));
     }
 
     let total_base_fee = base_fees
         .iter()
-        .try_fold(Fixed::ZERO, |acc, fee| -> Result<Fixed> {
-            let fee = hex_string_to_fixed(fee)?;
-            Ok(acc + fee)
-        })?;
+        .fold(Fixed::ZERO, |acc, fee| acc + fee.unwrap_or(Fixed::ZERO));
 
     let len: Fixed = Fixed::from_num(base_fees.len());
     let twap_result: Fixed = total_base_fee / len;
@@ -21,8 +17,31 @@ pub fn calculate_twap(base_fees: Vec<String>) -> Result<Fixed> {
     Ok(twap_result)
 }
 
-/// Calculates TWAP from a vector of block headers
-pub fn calculate_twap_from_headers(headers: Vec<BlockHeader>) -> Result<Fixed> {
-    let base_fees = extract_base_fees(&headers);
-    calculate_twap(base_fees)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_twap_fixed_empty() {
+        let base_fees = vec![];
+        assert!(calculate_twap_fixed(&base_fees).is_err());
+    }
+
+    #[test]
+    fn test_twap_fixed_with_values() {
+        let base_fees = vec![
+            Some(Fixed::from_num(100)),
+            Some(Fixed::from_num(200)),
+            Some(Fixed::from_num(300)),
+        ];
+        let twap = calculate_twap_fixed(&base_fees).unwrap();
+        assert_eq!(twap, Fixed::from_num(200));
+    }
+
+    #[test]
+    fn test_twap_fixed_with_none() {
+        let base_fees = vec![Some(Fixed::from_num(100)), None, Some(Fixed::from_num(300))];
+        let twap = calculate_twap_fixed(&base_fees).unwrap();
+        assert_eq!(twap, Fixed::from_num(400) / Fixed::from_num(3));
+    }
 }

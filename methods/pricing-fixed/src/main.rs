@@ -1,14 +1,14 @@
 use risc0_zkvm::guest::env;
-use eth_rlp_types::BlockHeader;
-use guest_pricing::{twap::calculate_twap_from_headers, volatility::calculate_volatility};
+use guest_pricing::{twap::calculate_twap_fixed, volatility::calculate_volatility_fixed};
+use fixed::{types::extra::U64, FixedI128};
 
+type Fixed = FixedI128<U64>;
 
 fn main() {
-    let blocks: Vec<BlockHeader> = env::read();
+    let base_fees: Vec<Option<Fixed>> = env::read();
 
-    let volatility = calculate_volatility(blocks.clone());
-    let twap = calculate_twap_from_headers(blocks.clone());
-    // let reserve_price = pricing_data::reserve_price::calculate_reserve_price(blocks.clone());
+    let volatility = calculate_volatility_fixed(&base_fees);
+    let twap = calculate_twap_fixed(&base_fees);
 
     env::commit(&(volatility.ok(), twap.ok()));
 }

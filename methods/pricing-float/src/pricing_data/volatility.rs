@@ -1,20 +1,13 @@
-use eth_rlp_types::BlockHeader;
 use eyre::Result;
 
-use super::utils::hex_string_to_f64;
-
 // Returns volatility as BPS (i.e., 5001 means VOL=50.01%)
-pub fn calculate_volatility(blocks: Vec<BlockHeader>) -> Result<f64> {
+pub fn calculate_volatility(base_fees: Vec<Option<f64>>) -> Result<f64> {
     // Calculate log returns
     let mut returns: Vec<f64> = Vec::new();
-    for i in 1..blocks.len() {
-        if let (Some(ref basefee_current), Some(ref basefee_previous)) =
-            (&blocks[i].base_fee_per_gas, &blocks[i - 1].base_fee_per_gas)
+    for i in 1..base_fees.len() {
+        if let (Some(basefee_current), Some(basefee_previous)) = 
+            (base_fees[i], base_fees[i - 1])
         {
-            // Convert base fees from hex string to f64
-            let basefee_current = hex_string_to_f64(basefee_current)?;
-            let basefee_previous = hex_string_to_f64(basefee_previous)?;
-
             // If the previous base fee is zero, skip to the next iteration
             if basefee_previous == 0.0 {
                 continue;
